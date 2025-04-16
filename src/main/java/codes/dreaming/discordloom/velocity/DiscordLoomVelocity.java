@@ -63,6 +63,7 @@ public class DiscordLoomVelocity {
     private static ProxyServer server;
     private final Logger logger;
     private static JDA jdaApi;
+    private static final String NICKNAME_ID = "meta.elysium:nickname";
 
     @Inject
     public DiscordLoomVelocity(ProxyServer server, Logger logger) {
@@ -311,6 +312,56 @@ public class DiscordLoomVelocity {
 
                             event.reply("Found matches " + String.join(", ", names)).setEphemeral(true).queue();
                         }
+
+                        if (event.getName().equals("Get in-game nickname")) {
+                            MetaNode discordIdNode = MetaNode.builder()
+                                    .key(LuckPermsMetadataKey)
+                                    .value(event.getTarget().getId())
+                                    .build();
+
+                            Set<UUID> uuids;
+                            try {
+                                uuids = LuckPermsProvider.get()
+                                        .getUserManager()
+                                        .searchAll(NodeMatcher.equals(discordIdNode, NodeEqualityPredicate.EXACT))
+                                        .get()
+                                        .keySet();
+                            } catch (Exception e) {
+                                uuids = Collections.emptySet();
+                            }
+
+                            if (uuids.isEmpty()) {
+                                event.reply("This user is not linked to any minecraft account").queue();
+                                return;
+                            }
+
+                            ArrayList<String> names = new ArrayList<>();
+
+                            for (UUID uuid : uuids) {
+                                net.luckperms.api.model.user.User luckUser;
+
+                                try {
+                                    luckUser = LuckPermsProvider.get().getUserManager().loadUser(uuid).join();
+                                } catch (Exception e) {
+                                    luckUser = null;
+                                }
+
+                                if (luckUser == null) {
+                                    names.add("§cUnknown user (§4" + uuid + "§c)");
+                                } else {
+                                    names.add(
+                                        luckUser.getNodes(NodeType.META)
+                                            .stream()
+                                            .filter(node -> node.getMetaKey().equals(NICKNAME_ID))
+                                            .findAny()
+                                            .orElseThrow()
+                                            .getMetaValue()
+                                    );
+                                }
+                            }
+
+                            event.reply("Found matches " + String.join(", ", names)).setEphemeral(true).queue();
+                        }
                     }
                 })
                 .build();
@@ -318,6 +369,11 @@ public class DiscordLoomVelocity {
         jdaApi.updateCommands()
                 .addCommands(Commands.context(Command.Type.USER, "Get user minecraft info"))
                 .queue();
+
+        jdaApi.updateCommands()
+                .addCommands(Commands.context(Command.Type.USER, "Get in-game nickname"))
+                .queue();
+
         RestClient restClient = RestClient.create(configHelper.getDiscordBotToken());
         server.getChannelRegistrar().register(QUERY_PACKET_ID);
         server.getChannelRegistrar().register(RELAY_PACKET_ID);
