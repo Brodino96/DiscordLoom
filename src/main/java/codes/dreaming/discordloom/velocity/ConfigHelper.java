@@ -81,16 +81,12 @@ public class ConfigHelper {
     public boolean getBanDiscordAccount() throws SerializationException {
         return configData.node("banDiscordAccount").getBoolean(true);
     }
-    
-    public boolean getEnableDiscordNicknameSync() {
-        return configData.node("enableDiscordNicknameSync").getBoolean(false);
-    }
-    
-    public String getAdminGroupId() {
-        return configData.node("adminGroupId").getString("xlsx");
-    }
-    
+
     public String getNicknameMetadataKey() {
         return configData.node("nicknameMetadataKey").getString("xxxx.xxxxxxx:xxxxxxxx");
+    }
+
+    public List<String> getNicknameSyncEnabledGuilds() throws SerializationException {
+        return configData.node("nicknameSyncEnabledGuilds").getList(String.class,List.of());
     }
 }

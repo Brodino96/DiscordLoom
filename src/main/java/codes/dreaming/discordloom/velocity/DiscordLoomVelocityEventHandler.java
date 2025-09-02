@@ -15,6 +15,7 @@ import discord4j.oauth2.DiscordOAuth2Client;
 import discord4j.rest.RestClient;
 import eu.pb4.banhammer.impl.config.ConfigManager;
 import io.netty.buffer.Unpooled;
+import me.lucko.fabric.api.permissions.v0.Permissions;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.Permission;
 import net.dv8tion.jda.api.entities.Guild;
@@ -37,6 +38,7 @@ import java.util.function.Function;
 import java.util.stream.Collector;
 import java.util.stream.Collectors;
 
+import static codes.dreaming.discordloom.DiscordLoom.LOGGER;
 import static codes.dreaming.discordloom.DiscordLoom.MOD_ID;
 import static codes.dreaming.discordloom.DiscordLoomServer.*;
 
@@ -88,104 +90,72 @@ public class DiscordLoomVelocityEventHandler {
         });
     }
 
-    @Subscribe
-    public void onPostLogin(PostLoginEvent event) {
-        Player player = event.getPlayer();
-        
-        // Check if Discord nickname sync is enabled
-        if (!config.getEnableDiscordNicknameSync()) {
-            logger.debug("Discord nickname sync is disabled, skipping for player {}", player.getUsername());
+    private void handleNicknameSync(User user) throws SerializationException {
+
+        LOGGER.info("Syncing nicknames");
+
+        if (config.getNicknameSyncEnabledGuilds().isEmpty()) {
             return;
         }
-        
-        try {
-            var manager = LuckPermsProvider.get().getUserManager();
-            var user = manager.getUser(player.getUniqueId());
-            
-            if (user == null) {
-                logger.warn("Could not find LuckPerms user for {} during Discord nickname sync", player.getUsername());
-                return;
-            }
 
-            // Check if player has admin group
-            String adminGroupId = config.getAdminGroupId();
-            boolean hasAdminGroup = user.getNodes().stream()
-                    .anyMatch(node -> node.getKey().equals("group." + adminGroupId));
-            
-            if (hasAdminGroup) {
-                logger.debug("Player {} has admin group '{}', skipping Discord nickname sync", player.getUsername(), adminGroupId);
-                return;
-            }
-
-            var discordIdNode = user.getNodes(NodeType.META)
-                    .stream()
-                    .filter(node -> node.getMetaKey().equals(LuckPermsMetadataKey))
-                    .findAny();
-            
-            if (discordIdNode.isEmpty()) {
-                logger.debug("Player {} does not have a Discord account linked", player.getUsername());
-                return;
-            }
-
-            String nicknameMetadataKey = config.getNicknameMetadataKey();
-            var nicknameNode = user.getNodes(NodeType.META)
-                    .stream()
-                    .filter(node -> node.getMetaKey().equals(nicknameMetadataKey))
-                    .findAny();
-            
-            if (nicknameNode.isEmpty()) {
-                logger.debug("Player {} does not have an in-game nickname set with key '{}'", player.getUsername(), nicknameMetadataKey);
-                return;
-            }
-
-            String minecraftNickname = nicknameNode.get().getMetaValue();
-            String discordUserId = discordIdNode.get().getMetaValue();
-            
-            config.getCheckForGuildsOnJoin().forEach(guildId -> {
-                try {
-                    Guild guild = jdaApi.getGuildById(guildId);
-                    if (guild == null) {
-                        logger.warn("Guild {} not found for Discord nickname sync", guildId);
-                        return;
-                    }
-                    
-                    Member member = guild.getMemberById(discordUserId);
-                    if (member == null) {
-                        logger.debug("Member {} not found in guild {} for Discord nickname sync", discordUserId, guildId);
-                        return;
-                    }
-                    
-                    String currentNickname = member.getNickname();
-                    if (minecraftNickname.equals(currentNickname)) {
-                        logger.debug("Discord nickname for {} ({}) is already set to '{}' in guild {}",
-                                player.getUsername(), discordUserId, minecraftNickname, guildId);
-                        return;
-                    }
-
-                    if (!guild.getSelfMember().hasPermission(Permission.NICKNAME_MANAGE)) {
-                        logger.warn("Discord bot lacks NICKNAME_MANAGE permission in guild {} to update nickname for {}",
-                                guildId, player.getUsername());
-                        return;
-                    }
-                    
-                    guild.modifyNickname(member, minecraftNickname)
-                            .reason("Minecraft nickname sync for " + player.getUsername())
-                            .queue(
-                                    success -> logger.info("Updated Discord nickname for {} ({}) to '{}' in guild {}",
-                                            player.getUsername(), discordUserId, minecraftNickname, guildId),
-                                    error -> logger.error("Failed to update Discord nickname for {} ({}) in guild {}: {}",
-                                            player.getUsername(), discordUserId, guildId, error.getMessage())
-                            );
-
-                } catch (Exception e) {
-                    logger.error("Error during Discord nickname sync for {} in guild {}: {}", 
-                            player.getUsername(), guildId, e.getMessage(), e);
-                }
-            });
-            
-        } catch (Exception e) {
-            logger.error("Error during Discord nickname sync for {}: {}", player.getUsername(), e.getMessage(), e);
+        if (PermissionHelper.hasPermission(user, MOD_ID + ".bypassNicknameSync")) {
+            return;
         }
+
+        var discordIdNode = user.getNodes(NodeType.META)
+                .stream()
+                .filter(node -> node.getMetaKey().equals(LuckPermsMetadataKey))
+                .findAny();
+
+        if (discordIdNode.isEmpty()) {
+            logger.debug("Player {} does not have a Discord account linked", user.getUsername());
+            return;
+        }
+
+        String nicknameMetadataKey = config.getNicknameMetadataKey();
+        var nicknameNode = user.getNodes(NodeType.META)
+                .stream()
+                .filter(node -> node.getMetaKey().equals(nicknameMetadataKey))
+                .findAny();
+
+        if (nicknameNode.isEmpty()) {
+            logger.debug("Player {} does not have an in-game nickname set with key '{}'", user.getUsername(), nicknameMetadataKey);
+            return;
+        }
+
+        String minecraftNickname = nicknameNode.get().getMetaValue();
+        String discordUserId = discordIdNode.get().getMetaValue();
+
+        config.getNicknameSyncEnabledGuilds().forEach(guildId -> {
+
+            Guild guild = jdaApi.getGuildById(guildId);
+            if (guild == null) {
+                logger.warn("Guild {} not found for Discord nickname sync", guildId);
+                return;
+            }
+
+            Member member = guild.getMemberById(discordUserId);
+            if (member == null) {
+                logger.debug("Member {} not found in guild {} for Discord nickname sync", discordUserId, guildId);
+                return;
+            }
+
+            String currentNickname = member.getNickname();
+            if (minecraftNickname.equals(currentNickname)) {
+                logger.debug("Discord nickname for {} ({}) is already set to '{}' in guild {}",
+                        user.getUsername(), discordUserId, minecraftNickname, guildId);
+                return;
+            }
+
+            guild.modifyNickname(member, minecraftNickname)
+                    .reason("Minecraft nickname sync for " + user.getUsername())
+                    .queue(
+                            success -> logger.info("Updated Discord nickname for {} ({}) to '{}' in guild {}",
+                                    user.getUsername(), discordUserId, minecraftNickname, guildId),
+                            error -> logger.error("Failed to update Discord nickname for {} ({}) in guild {}: {}",
+                                    user.getUsername(), discordUserId, guildId, error.getMessage())
+                    );
+        });
     }
 
     @Subscribe(priority = -1)
@@ -304,6 +274,7 @@ public class DiscordLoomVelocityEventHandler {
                         playerFuture.completeExceptionally(new RuntimeException("Not in the mandatory channel."));
                         return;
                     }
+                    this.handleNicknameSync(user);
                 } catch (SerializationException e) {
                     logger.warn("Error in validateDiscord", e);
                     playerFuture.completeExceptionally(new RuntimeException("Error in validation Discord, try again later."));

@@ -8,7 +8,6 @@ allowMultipleMinecraftAccountsPerDiscordAccount : false
 mandatoryVCChannels : []
 banDiscordAccount : true
 addDiscordRolesOnJoin: []
-# Discord nickname sync settings
-enableDiscordNicknameSync : true
-adminGroupId : "xxxxx"
+
 nicknameMetadataKey : "xxxx.xxxxxxx:xxxxxxxx"
+nicknameSyncEnabledGuilds : []
