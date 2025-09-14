@@ -24,10 +24,7 @@ import net.luckperms.api.node.types.MetaNode;
 import org.slf4j.Logger;
 import org.spongepowered.configurate.serialize.SerializationException;
 
-import java.util.HashMap;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -200,6 +197,74 @@ public class DiscordLoomVelocityEventHandler {
         }
     }
 
+    private void syncNicknames(net.dv8tion.jda.api.entities.User discordUser, User luckPermsUser) throws SerializationException {
+
+        if (PermissionHelper.hasPermission(luckPermsUser, MOD_ID + ".bypassNicknameSync")) {
+            logger.info("User {} has bypass permission for nickname sync", luckPermsUser.getUsername());
+            return;
+        }
+
+        List<String> guildsForSync = config.getGuildsForNicknameSync();
+        if (guildsForSync.isEmpty()) {
+            logger.info("No guilds configured for nickname sync");
+            return;
+        }
+
+        String nicknameKey = config.getNicknameMeta();
+        if (nicknameKey == null || nicknameKey.isEmpty()) {
+            logger.warn("Nickname meta key not configured");
+            return;
+        }
+
+        var inGameNicknameNode = luckPermsUser
+                .getNodes(NodeType.META)
+                .stream()
+                .filter(node -> node.getMetaKey().equals(nicknameKey))
+                .findFirst()
+                .orElseThrow();
+
+        logger.info(inGameNicknameNode.toString());
+
+        String inGameNickname = inGameNicknameNode.getMetaValue();
+        if (inGameNickname.trim().isEmpty()) {
+            logger.info("Empty in-game nickname for user {}", luckPermsUser.getUsername());
+            return;
+        }
+
+        for (String guildId : guildsForSync) {
+            Guild guild = jdaApi.getGuildById(guildId);
+            if (guild == null) {
+                logger.warn("Guild not found: {}", guildId);
+                continue;
+            }
+
+            var member = guild.retrieveMemberById(discordUser.getId())
+                    .onErrorMap(throwable -> null)
+                    .complete();
+
+            if (member == null) {
+                logger.info("User {} is not a member of guild {}", luckPermsUser.getUsername(), guildId);
+                continue;
+            }
+
+            String currentDiscordNickname = member.getNickname();
+            if (inGameNickname.equals(currentDiscordNickname)) {
+                logger.info("Discord nickname for user {} already matches in-game nickname: {}",
+                        luckPermsUser.getUsername(), inGameNickname);
+                continue;
+            }
+
+            try {
+                member.modifyNickname(inGameNickname).queue();
+                logger.info("Updated Discord nickname for user {} to '{}' in guild {}", 
+                        luckPermsUser.getUsername(), inGameNickname, guildId);
+            } catch (Exception e) {
+                logger.warn("Failed to update Discord nickname for user {} in guild {}: {}", 
+                        luckPermsUser.getUsername(), guildId, e.getMessage());
+            }
+        }
+    }
+
     private PreLoginEvent.PreLoginComponentResult validateDiscord(PreLoginEvent event, MetaNode idNode, User user) throws SerializationException {
         var discordUser = jdaApi.retrieveUserById(idNode.getMetaValue()).complete();
         if (discordUser == null) {
@@ -278,6 +343,12 @@ public class DiscordLoomVelocityEventHandler {
             LuckPermsProvider.get()
                     .getUserManager()
                     .saveUser(user);
+        }
+
+        try {
+            syncNicknames(discordUser, user);
+        } catch (SerializationException e) {
+            logger.error("Failed to sync nicknames!", e);
         }
 
         logger.info("User {} ({}) joined with a discordloom.id node! ({})", event.getUsername(), event.getUniqueId(), idNode.getMetaValue());

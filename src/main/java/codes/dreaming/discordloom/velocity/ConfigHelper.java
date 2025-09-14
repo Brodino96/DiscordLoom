@@ -78,4 +78,12 @@ public class ConfigHelper {
     public boolean getBanDiscordAccount() throws SerializationException {
         return configData.node("banDiscordAccount").getBoolean(true);
     }
+
+    public String getNicknameMeta() throws SerializationException {
+        return configData.node("nicknameMeta").getString();
+    }
+
+    public List<String> getGuildsForNicknameSync() throws SerializationException {
+        return configData.node("guildsForNicknameSync").getList(String.class,List.of());
+    }
 }

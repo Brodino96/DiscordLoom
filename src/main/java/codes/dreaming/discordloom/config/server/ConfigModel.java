@@ -21,4 +21,7 @@ public class ConfigModel {
     public List<String> mandatoryVCChannels = List.of();
 
     public Boolean banDiscordAccount = true;
+
+    public String nicknameMeta = "xxxxxxx:xxxxxxxx";
+    public List<String> guildsForNicknameSync = List.of();
 }

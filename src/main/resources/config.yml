@@ -7,3 +7,5 @@ syncDiscordRolesOnJoin : []
 allowMultipleMinecraftAccountsPerDiscordAccount : false
 mandatoryVCChannels : []
 banDiscordAccount : true
+nicknameMeta: "xxxxxxx:xxxxxxxx"
+guildsForNicknameSync: []
