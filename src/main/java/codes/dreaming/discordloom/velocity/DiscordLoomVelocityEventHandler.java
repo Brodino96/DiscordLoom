@@ -228,8 +228,6 @@ public class DiscordLoomVelocityEventHandler {
             return;
         }
 
-        logger.info(inGameNicknameNode.toString());
-
         String inGameNickname = inGameNicknameNode.getMetaValue();
         if (inGameNickname.trim().isEmpty()) {
             logger.info("Empty in-game nickname for user {}", luckPermsUser.getUsername());
