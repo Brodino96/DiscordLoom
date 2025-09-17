@@ -250,17 +250,18 @@ public class DiscordLoomVelocityEventHandler {
                 continue;
             }
 
+            String newNickname = inGameNickname + " - " + discordUser.getName();
             String currentDiscordNickname = member.getNickname();
-            if (inGameNickname.equals(currentDiscordNickname)) {
-                logger.info("Discord nickname for user {} already matches in-game nickname: {}",
-                        luckPermsUser.getUsername(), inGameNickname);
+            if (newNickname.equals(currentDiscordNickname)) {
+                logger.info("Discord nickname for user {} already matches: {}",
+                        luckPermsUser.getUsername(), newNickname);
                 continue;
             }
 
             try {
-                member.modifyNickname(inGameNickname).queue();
-                logger.info("Updated Discord nickname for user {} to '{}' in guild {}", 
-                        luckPermsUser.getUsername(), inGameNickname, guildId);
+                member.modifyNickname(newNickname).queue();
+                logger.info("Updated Discord nickname for user {} to '{}' in guild {}",
+                        luckPermsUser.getUsername(), newNickname, guildId);
             } catch (Exception e) {
                 logger.warn("Failed to update Discord nickname for user {} in guild {}: {}", 
                         luckPermsUser.getUsername(), guildId, e.getMessage());
