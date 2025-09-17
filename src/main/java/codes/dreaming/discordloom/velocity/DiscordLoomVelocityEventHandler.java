@@ -349,7 +349,7 @@ public class DiscordLoomVelocityEventHandler {
         }
 
         try {
-            syncNicknames(discordUser, user);
+            this.syncNicknames(discordUser, user);
         } catch (Exception e) {
             logger.error("Failed to sync nicknames!", e);
         }
