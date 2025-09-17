@@ -211,7 +211,7 @@ public class DiscordLoomVelocityEventHandler {
         }
 
         String nicknameKey = config.getNicknameMeta();
-        if (nicknameKey == null || nicknameKey.isEmpty()) {
+        if (nicknameKey == null || nicknameKey.isEmpty() || nicknameKey.equals("xxxxxxx:xxxxxxxx")) {
             logger.warn("Nickname meta key not configured");
             return;
         }
@@ -221,7 +221,12 @@ public class DiscordLoomVelocityEventHandler {
                 .stream()
                 .filter(node -> node.getMetaKey().equals(nicknameKey))
                 .findFirst()
-                .orElseThrow();
+                .orElse(null);
+
+        if (inGameNicknameNode == null) {
+            logger.info("No nickname meta node found for user {}", luckPermsUser.getUsername());
+            return;
+        }
 
         logger.info(inGameNicknameNode.toString());
 
@@ -347,7 +352,7 @@ public class DiscordLoomVelocityEventHandler {
 
         try {
             syncNicknames(discordUser, user);
-        } catch (SerializationException e) {
+        } catch (Exception e) {
             logger.error("Failed to sync nicknames!", e);
         }
 
