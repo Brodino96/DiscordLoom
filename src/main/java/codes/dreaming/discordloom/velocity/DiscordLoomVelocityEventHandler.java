@@ -6,6 +6,7 @@ import codes.dreaming.discordloom.velocity.utils.FriendlyByteBuf;
 import com.velocitypowered.api.event.Continuation;
 import com.velocitypowered.api.event.Subscribe;
 import com.velocitypowered.api.event.connection.PreLoginEvent;
+import com.velocitypowered.api.event.connection.PostLoginEvent;
 import com.velocitypowered.api.event.permission.PermissionsSetupEvent;
 import com.velocitypowered.api.proxy.LoginPhaseConnection;
 import com.velocitypowered.api.proxy.Player;
@@ -69,6 +70,37 @@ public class DiscordLoomVelocityEventHandler {
             }
             continuation.resume();
         });
+    }
+
+    @Subscribe
+    public void postLoginEvent(PostLoginEvent event) {
+        Player player = event.getPlayer();
+        var user = LuckPermsProvider.get().getUserManager().getUser(player.getUniqueId());
+
+        if (user == null) {
+            player.disconnect(Component.translatable("text.discordloom.disconnect.luckperms"));
+            return;
+        }
+
+        if (PermissionHelper.hasPermission(user, MOD_ID + ".bypass_vc")) {
+            return;
+        }
+
+        var idNode = user.getNodes(NodeType.META)
+                .stream()
+                .filter(node -> node.getMetaKey().equals(LuckPermsMetadataKey))
+                .findAny();
+
+        try {
+            if (!config.getMandatoryVCChannels().isEmpty()
+                    && (idNode.isEmpty() || !this.isInMandatoryVoiceChannel(idNode.get().getMetaValue()))) {
+                logger.info("Disconnecting player {} after login because they are not in a mandatory voice channel", player.getUniqueId());
+                player.disconnect(Component.translatable("text.discordloom.disconnect.channel.voice"));
+            }
+        } catch (SerializationException e) {
+            logger.warn("Error in post-login Discord validation", e);
+            player.disconnect(Component.text("Error in validation Discord, try again later."));
+        }
     }
 
 
@@ -293,24 +325,9 @@ public class DiscordLoomVelocityEventHandler {
            return PreLoginEvent.PreLoginComponentResult.denied(Component.translatable("text.discordloom.disconnect.channel.text"));
         }
         var hasMandatoryVCChannel = config.getMandatoryVCChannels().isEmpty() || (user != null && PermissionHelper.hasPermission(user, MOD_ID + ".bypass_vc"));
-        if (!hasMandatoryVCChannel) {
-            hasMandatoryVCChannel = config.
-                    getMandatoryVCChannels()
-                    .stream()
-                    .anyMatch(mandatoryVCChannel -> {
-                        var voiceChannel = jdaApi.getVoiceChannelById(mandatoryVCChannel);
-                        if (voiceChannel == null)
-                            return false;
-
-                        return voiceChannel.getMembers()
-                                .stream()
-                                .anyMatch(member -> member.getId().equals(discordUser.getId()));
-                    });
-
-            if (!hasMandatoryVCChannel) {
-                logger.info("User {} ({}) joined without being in a mandatory voice channel!", event.getUsername(), event.getUniqueId());
-                return PreLoginEvent.PreLoginComponentResult.denied(Component.translatable("text.discordloom.disconnect.channel.voice"));
-            }
+        if (!hasMandatoryVCChannel && !this.isInMandatoryVoiceChannel(discordUser.getId())) {
+            logger.info("User {} ({}) joined without being in a mandatory voice channel!", event.getUsername(), event.getUniqueId());
+            return PreLoginEvent.PreLoginComponentResult.denied(Component.translatable("text.discordloom.disconnect.channel.voice"));
         }
         // save stuff
         if (user != null) {
@@ -357,6 +374,17 @@ public class DiscordLoomVelocityEventHandler {
 
         logger.info("User {} ({}) joined with a discordloom.id node! ({})", event.getUsername(), event.getUniqueId(), idNode.getMetaValue());
         return PreLoginEvent.PreLoginComponentResult.allowed();
+    }
+
+    private boolean isInMandatoryVoiceChannel(String discordId) throws SerializationException {
+        return config.getMandatoryVCChannels().isEmpty() || config
+                .getMandatoryVCChannels()
+                .stream()
+                .map(jdaApi::getVoiceChannelById)
+                .filter(Objects::nonNull)
+                .anyMatch(voiceChannel -> voiceChannel.getMembers()
+                        .stream()
+                        .anyMatch(member -> member.getId().equals(discordId)));
     }
 
 }
