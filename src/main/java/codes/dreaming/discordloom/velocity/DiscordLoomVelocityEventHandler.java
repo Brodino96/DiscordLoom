@@ -282,7 +282,7 @@ public class DiscordLoomVelocityEventHandler {
                 continue;
             }
 
-            String newNickname = inGameNickname + " - " + discordUser.getName();
+            String newNickname = (inGameNickname + " - " + discordUser.getName()).substring(0, 32);
             String currentDiscordNickname = member.getNickname();
             if (newNickname.equals(currentDiscordNickname)) {
                 logger.info("Discord nickname for user {} already matches: {}",
